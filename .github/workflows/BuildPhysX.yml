@@ -31,7 +31,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           cd physx
-          generate_projects.bat vc17win64-cpu-only
+          ./generate_projects.bat vc17win64-cpu-only
         working-directory: physx
 
       - name: Build-Windows
