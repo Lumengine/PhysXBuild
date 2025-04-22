@@ -44,11 +44,19 @@ jobs:
       - name: Package build output
         run: |
           mkdir -p output
-          cp -r physx/bin output/
-          cp -r physx/lib output/
+          mkdir -p output/bin
+          mkdir -p output/lib
+          mkdir -p output/include
           if [ "${{ runner.os }}" == "Windows" ]; then
+            cp physx/bin/*.dll output/bin/
+            cp physx/bin/*.lib output/lib/ 
+            cp physx/include/*.lib output/include/ 
             7z a PhysX-${{ matrix.os }}-${{ matrix.config }}.zip output/*
           else
+            # Linux: .so and .a
+            cp physx/bin/*.so output/bin/ || echo "No .so found"
+            cp physx/bin/*.a output/lib/ || echo "No .a found"
+            cp physx/include/*.lib output/include/ 
             tar -czf PhysX-${{ matrix.os }}-${{ matrix.config }}.tar.gz output/*
           fi
         shell: bash
