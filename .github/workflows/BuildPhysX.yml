@@ -48,8 +48,8 @@ jobs:
           mkdir -p output/lib
           mkdir -p output/include
           if [ "${{ runner.os }}" == "Windows" ]; then
-            cp physx/bin/*.dll output/bin/
-            cp physx/bin/*.lib output/lib/ 
+            cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
+            cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.lib output/lib/ 
             cp physx/include/*.lib output/include/ 
             7z a PhysX-${{ matrix.os }}-${{ matrix.config }}.zip output/*
           else
