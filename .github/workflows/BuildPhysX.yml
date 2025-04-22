@@ -32,7 +32,6 @@ jobs:
       - name: Generate Projects (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          cd physx
           ./generate_projects.bat vc17win64-cpu-only
         working-directory: physx
 
