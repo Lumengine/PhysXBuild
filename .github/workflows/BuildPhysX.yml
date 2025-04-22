@@ -1,0 +1,59 @@
+name: Build PhysX
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }} - ${{ matrix.config }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [windows-latest]
+        config: [debug, release, profile, checked]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt update
+          sudo apt install -y ninja-build cmake g++ python3
+
+      - name: Generate Projects (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          generate_projects.bat vc17win64-cpu-only
+        working-directory: physx
+
+      - name: Build-Windows
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        run: cmake --build --config ${{env.config}}
+        working-directory: physx/compiler/vc17win64-cpu-only
+
+      - name: Package build output
+        run: |
+          mkdir -p output
+          cp -r physx/bin output/
+          cp -r physx/lib output/
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            7z a PhysX-${{ matrix.os }}-${{ matrix.config }}.zip output/*
+          else
+            tar -czf PhysX-${{ matrix.os }}-${{ matrix.config }}.tar.gz output/*
+          fi
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhysX-${{ matrix.os }}-${{ matrix.config }}
+          path: |
+            PhysX-${{ matrix.os }}-${{ matrix.config }}.*
