@@ -30,7 +30,7 @@ jobs:
           sudo apt install -y ninja-build cmake g++ python3
       - name: Download file from GitHub
         run: |
-            curl -L -o vc17win64-cpu-only-md.xml https://github.com/Lumengine/PhysXBuild/blob/db74562cae55f857e903e1e726f0f13dc2221c92/vc17win64-cpu-only-md.xml
+            curl -L -o vc17win64-cpu-only-md.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/vc17win64-cpu-only-md.xml
       - name: Copy file into repo
         run: |
             cp vc17win64-cpu-only-md.xml ./physx/buildtools/presets/public
