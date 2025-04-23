@@ -15,7 +15,7 @@ jobs:
       matrix:
         os: [windows-latest]
         config: [debug, release, profile, checked]
-        platform: [x86_64]
+        platform: [x86_64, aarch64]
 
     steps:
       - name: Checkout repository
@@ -50,20 +50,20 @@ jobs:
           mkdir -p output/include
           mkdir -p output/documentation
           if [ "${{ runner.os }}" == "Windows" ]; then
-            echo "PHYSX_BINARY_ARCHIVE=PhysX-${{ matrix.os }}-${{ matrix.config }}.zip" >> "$GITHUB_OUTPUT"
+            echo "PHYSX_BINARY_ARCHIVE=PhysX-5.6.0.win.${{ matrix.platform }}.${{ matrix.config }}.zip" >> "$GITHUB_OUTPUT"
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.lib output/lib/ 
             cp -r physx/include output/include 
             cp -r physx/documentation output/documentation 
-            7z a PhysX-${{ matrix.os }}-${{ matrix.config }}.zip output/*
+            7z a PhysX-5.6.0.win.${{ matrix.platform }}.${{ matrix.config }}.zip output/*
           else
-            echo "PHYSX_BINARY_ARCHIVE=PhysX-${{ matrix.os }}-${{ matrix.config }}.tar.gz" >> "$GITHUB_OUTPUT"
+            echo "PHYSX_BINARY_ARCHIVE=PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz" >> "$GITHUB_OUTPUT"
             # Linux: .so and .a
             cp physx/bin/*.so output/bin/ 
             cp physx/bin/*.a output/lib/
             cp -r physx/include output/include 
             cp -r physx/documentation output/documentation 
-            tar -czf PhysX-${{ matrix.os }}-${{ matrix.config }}.tar.gz output/*
+            tar -czf PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz output/*
           fi
         shell: bash
 
