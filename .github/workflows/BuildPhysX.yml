@@ -66,8 +66,6 @@ jobs:
             cp -r physx/include output/include 
             cp -r physx/documentation output/documentation 
             tar -czf PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz output/*
-          fi
-        shell: bash
 
       - name: Publish
         uses: softprops/action-gh-release@v1
