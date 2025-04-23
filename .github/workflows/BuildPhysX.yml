@@ -47,15 +47,17 @@ jobs:
           mkdir -p output
           mkdir -p output/bin
           mkdir -p output/lib
-          mkdir -p output/include
-          mkdir -p output/documentation
           if [ "${{ runner.os }}" == "Windows" ]; then
-            echo "PHYSX_BINARY_ARCHIVE=PhysX-5.6.0.win.${{ matrix.platform }}.${{ matrix.config }}.zip" >> "$GITHUB_OUTPUT"
+            $binArchiveName = "PhysX-5.6.0.win.${{ matrix.platform }}.vc143.mt.${{ matrix.config }}.zip"
+            echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.lib output/lib/ 
-            cp -r physx/include output/include 
-            cp -r physx/documentation output/documentation 
-            7z a PhysX-5.6.0.win.${{ matrix.platform }}.${{ matrix.config }}.zip output/*
+            
+            7z a "$binArchiveName ${{github.workspace}}/output/bin/
+            7z a "$binArchiveName ${{github.workspace}}/output/lib/
+            7z a "$binArchiveName ${{github.workspace}}/physx/include/
+            7z a "$binArchiveName ${{github.workspace}}/physx/documentation/
+
           else
             echo "PHYSX_BINARY_ARCHIVE=PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz" >> "$GITHUB_OUTPUT"
             # Linux: .so and .a
