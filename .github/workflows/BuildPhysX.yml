@@ -47,7 +47,7 @@ jobs:
           mkdir -p output
           mkdir -p output/bin
           mkdir -p output/lib
-          if [ "${{ runner.os }}" == "Windows" ]; then
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
             $binArchiveName = "PhysX-5.6.0.win.${{ matrix.platform }}.vc143.mt.${{ matrix.config }}.zip"
             echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
