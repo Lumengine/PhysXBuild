@@ -54,10 +54,7 @@ jobs:
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.lib output/lib/ 
             
-            7z a "$binArchiveName" ${{github.workspace}}/output/bin/
-            7z a "$binArchiveName" ${{github.workspace}}/output/lib/
-            7z a "$binArchiveName" ${{github.workspace}}/physx/include/
-            7z a "$binArchiveName" ${{github.workspace}}/physx/documentation/
+            7z a "$binArchiveName" ./output/bin/ ./output/lib/ ./physx/include/ ./physx/documentation/
 
           else
             echo "PHYSX_BINARY_ARCHIVE=PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz" >> "$GITHUB_OUTPUT"
