@@ -2,9 +2,8 @@ name: Build PhysX
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    tags:
+      - 'v[0-9]+.[0-9]+'
   workflow_dispatch:
 
 jobs:
@@ -16,6 +15,7 @@ jobs:
       matrix:
         os: [windows-latest]
         config: [debug, release, profile, checked]
+        platform: [x86_64]
 
     steps:
       - name: Checkout repository
@@ -42,28 +42,35 @@ jobs:
         working-directory: physx
 
       - name: Package build output
+        id: build
         run: |
           mkdir -p output
           mkdir -p output/bin
           mkdir -p output/lib
           mkdir -p output/include
+          mkdir -p output/documentation
           if [ "${{ runner.os }}" == "Windows" ]; then
+            echo "PHYSX_BINARY_ARCHIVE=PhysX-${{ matrix.os }}-${{ matrix.config }}.zip" >> "$GITHUB_OUTPUT"
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
             cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.lib output/lib/ 
             cp -r physx/include output/include 
+            cp -r physx/documentation output/documentation 
             7z a PhysX-${{ matrix.os }}-${{ matrix.config }}.zip output/*
           else
+            echo "PHYSX_BINARY_ARCHIVE=PhysX-${{ matrix.os }}-${{ matrix.config }}.tar.gz" >> "$GITHUB_OUTPUT"
             # Linux: .so and .a
             cp physx/bin/*.so output/bin/ 
             cp physx/bin/*.a output/lib/
             cp -r physx/include output/include 
+            cp -r physx/documentation output/documentation 
             tar -czf PhysX-${{ matrix.os }}-${{ matrix.config }}.tar.gz output/*
           fi
         shell: bash
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Publish
+        uses: softprops/action-gh-release@v1
         with:
-          name: PhysX-${{ matrix.os }}-${{ matrix.config }}
-          path: |
-            PhysX-${{ matrix.os }}-${{ matrix.config }}.*
+          files: |
+            ${{ steps.build.outputs.PHYSX_BINARY_ARCHIVE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
