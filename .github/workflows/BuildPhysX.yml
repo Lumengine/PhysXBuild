@@ -28,17 +28,22 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y ninja-build cmake g++ python3
-
+      - name: Download file from GitHub
+        run: |
+            curl -L -o vc17win64-cpu-only-md.xml https://github.com/Lumengine/PhysXBuild/blob/db74562cae55f857e903e1e726f0f13dc2221c92/vc17win64-cpu-only-md.xml
+      - name: Copy file into repo
+        run: |
+            cp vc17win64-cpu-only-md.xml ./physx/buildtools/presets/public
       - name: Generate Projects (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          ./generate_projects.bat vc17win64-cpu-only
+          ./generate_projects.bat vc17win64-cpu-only-md
         working-directory: physx
 
       - name: Build-Windows
         if: matrix.os == 'windows-latest'
         continue-on-error: true
-        run: cmake --build ./compiler/vc17win64-cpu-only --config ${{matrix.config}}
+        run: cmake --build ./compiler/vc17win64-cpu-only-md --config ${{matrix.config}}
         working-directory: physx
 
       - name: Package build output
@@ -49,10 +54,10 @@ jobs:
           mkdir -p output/bin
           mkdir -p output/lib
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            binArchiveName="PhysX-5.6.0.win.${{ matrix.platform }}.vc143.mt.${{ matrix.config }}.zip"
+            binArchiveName="PhysX-5.6.0.win.${{ matrix.platform }}.vc143.md.${{ matrix.config }}.zip"
             echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
-            cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.dll output/bin/
-            cp physx/bin/win.x86_64.vc143.mt/${{matrix.config}}/*.lib output/lib/ 
+            cp physx/bin/win.x86_64.vc143.md/${{matrix.config}}/*.dll output/bin/
+            cp physx/bin/win.x86_64.vc143.md/${{matrix.config}}/*.lib output/lib/ 
             
             7z a "$binArchiveName" ./output/bin/ ./output/lib/ ./physx/include/ ./physx/documentation/
 
