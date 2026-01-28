@@ -71,7 +71,7 @@ jobs:
 
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: cmake --build ./compiler/linux-clang-cpu-only --config ${{ matrix.config }}
+        run: cmake --build ./compiler/linux-clang-cpu-only-${{ matrix.config }}
         working-directory: physx
 
       - name: Package (Linux)
