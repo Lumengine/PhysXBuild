@@ -1,0 +1,77 @@
+name: Build PhysX (Linux)
+
+on:
+  push:
+    tags:
+      - 'v5.6.0-test'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Linux - ${{ matrix.config }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        config: [debug, release, profile, checked]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA-Omniverse/PhysX
+          ref: 107.0-physx-5.6.0
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y ninja-build cmake clang python3 libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
+
+      - name: Download preset from GitHub
+        run: |
+          curl -L -o linux-cpu-only.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/linux-cpu-only.xml
+
+      - name: Copy preset into repo
+        run: |
+          cp linux-cpu-only.xml ./physx/buildtools/presets/public/
+
+      - name: Generate Projects
+        run: |
+          chmod +x ./generate_projects.sh
+          ./generate_projects.sh linux-cpu-only
+        working-directory: physx
+
+      - name: Build
+        continue-on-error: true
+        run: cmake --build ./compiler/linux-cpu-only --config ${{ matrix.config }}
+        working-directory: physx
+
+      - name: Package build output
+        id: build
+        run: |
+          mkdir -p output/bin
+          mkdir -p output/lib
+          mkdir -p output/include
+          mkdir -p output/documentation
+
+          binArchiveName="PhysX-5.6.0.linux.x86_64.clang.${{ matrix.config }}.tar.gz"
+          echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
+
+          # Copy shared libraries
+          cp physx/bin/linux.clang/${{ matrix.config }}/*.so output/bin/ 2>/dev/null || true
+          cp physx/bin/linux.clang/${{ matrix.config }}/*.a output/lib/ 2>/dev/null || true
+
+          # Copy headers and documentation
+          cp -r physx/include/* output/include/
+          cp -r physx/documentation/* output/documentation/ 2>/dev/null || true
+
+          # Create archive
+          tar -czf "$binArchiveName" -C output .
+
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ steps.build.outputs.PHYSX_BINARY_ARCHIVE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
