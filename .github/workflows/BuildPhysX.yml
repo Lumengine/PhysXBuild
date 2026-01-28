@@ -3,19 +3,19 @@ name: Build PhysX
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }} - ${{ matrix.config }}
+    name: Build ${{ matrix.os }} - ${{ matrix.config }}
     runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest]
+        os: [windows-latest, ubuntu-latest]
         config: [debug, release, profile, checked]
-        platform: [x86_64, aarch64]
 
     steps:
       - name: Checkout repository
@@ -23,57 +23,75 @@ jobs:
         with:
           repository: NVIDIA-Omniverse/PhysX
           ref: 107.0-physx-5.6.0
+
+      # === WINDOWS ===
+      - name: Download preset (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          curl -L -o vc17win64-cpu-only-md.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/vc17win64-cpu-only-md.xml
+          cp vc17win64-cpu-only-md.xml ./physx/buildtools/presets/public/
+
+      - name: Generate Projects (Windows)
+        if: matrix.os == 'windows-latest'
+        run: ./generate_projects.bat vc17win64-cpu-only-md
+        working-directory: physx
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cmake --build ./compiler/vc17win64-cpu-only-md --config ${{ matrix.config }}
+        working-directory: physx
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        id: package-windows
+        shell: bash
+        run: |
+          mkdir -p output/bin output/lib
+          binArchiveName="PhysX-5.6.0.win.x86_64.vc143.md.${{ matrix.config }}.zip"
+          echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
+          cp physx/bin/win.x86_64.vc143.md/${{ matrix.config }}/*.dll output/bin/
+          cp physx/bin/win.x86_64.vc143.md/${{ matrix.config }}/*.lib output/lib/
+          7z a "$binArchiveName" ./output/bin/ ./output/lib/ ./physx/include/ ./physx/documentation/
+
+      # === LINUX ===
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt update
-          sudo apt install -y ninja-build cmake g++ python3
-      - name: Download file from GitHub
+          sudo apt install -y ninja-build cmake clang python3 libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
+
+      - name: Generate Projects (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-            curl -L -o vc17win64-cpu-only-md.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/vc17win64-cpu-only-md.xml
-      - name: Copy file into repo
-        run: |
-            cp vc17win64-cpu-only-md.xml ./physx/buildtools/presets/public/
-      - name: Generate Projects (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          ./generate_projects.bat vc17win64-cpu-only-md
+          chmod +x ./generate_projects.sh
+          ./generate_projects.sh linux-clang-cpu-only
+          echo "=== Contents of compiler/ ==="
+          ls -la ./compiler/ || echo "compiler/ does not exist"
         working-directory: physx
 
-      - name: Build-Windows
-        if: matrix.os == 'windows-latest'
-        continue-on-error: true
-        run: cmake --build ./compiler/vc17win64-cpu-only-md --config ${{matrix.config}}
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake --build ./compiler/linux-clang-cpu-only --config ${{ matrix.config }}
         working-directory: physx
 
-      - name: Package build output
-        id: build
-        shell: bash
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        id: package-linux
         run: |
-          mkdir -p output
-          mkdir -p output/bin
-          mkdir -p output/lib
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            binArchiveName="PhysX-5.6.0.win.${{ matrix.platform }}.vc143.md.${{ matrix.config }}.zip"
-            echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
-            cp physx/bin/win.x86_64.vc143.md/${{matrix.config}}/*.dll output/bin/
-            cp physx/bin/win.x86_64.vc143.md/${{matrix.config}}/*.lib output/lib/ 
-            
-            7z a "$binArchiveName" ./output/bin/ ./output/lib/ ./physx/include/ ./physx/documentation/
+          mkdir -p output/lib output/include output/documentation
+          binArchiveName="PhysX-5.6.0.linux.x86_64.clang.${{ matrix.config }}.tar.gz"
+          echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
+          cp physx/bin/linux.clang/${{ matrix.config }}/*.a output/lib/ 2>/dev/null || true
+          cp -r physx/include/* output/include/
+          cp -r physx/documentation/* output/documentation/ 2>/dev/null || true
+          tar -czf "$binArchiveName" -C output .
 
-          else
-            echo "PHYSX_BINARY_ARCHIVE=PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz" >> "$GITHUB_OUTPUT"
-            # Linux: .so and .a
-            cp physx/bin/*.so output/bin/ 
-            cp physx/bin/*.a output/lib/
-            cp -r physx/include output/include 
-            cp -r physx/documentation output/documentation 
-            tar -czf PhysX-5.6.0.linux.${{ matrix.platform }}.${{ matrix.config }}.tar.gz output/*
-          fi
+      # === PUBLISH ===
       - name: Publish
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{ steps.build.outputs.PHYSX_BINARY_ARCHIVE }}
+            ${{ steps.package-windows.outputs.PHYSX_BINARY_ARCHIVE }}
+            ${{ steps.package-linux.outputs.PHYSX_BINARY_ARCHIVE }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
