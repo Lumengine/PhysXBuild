@@ -58,20 +58,24 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt update
-          sudo apt install -y ninja-build cmake clang python3 libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
+          sudo apt install -y ninja-build cmake clang python3
+
+      - name: Download preset (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          curl -L -o linux-clang-cpu-only-nosnippets.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/linux-clang-cpu-only-nosnippets.xml
+          cp linux-clang-cpu-only-nosnippets.xml ./physx/buildtools/presets/public/
 
       - name: Generate Projects (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           chmod +x ./generate_projects.sh
-          ./generate_projects.sh linux-clang-cpu-only
-          echo "=== Contents of compiler/ ==="
-          ls -la ./compiler/ || echo "compiler/ does not exist"
+          ./generate_projects.sh linux-clang-cpu-only-nosnippets
         working-directory: physx
 
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: cmake --build ./compiler/linux-clang-cpu-only-${{ matrix.config }}
+        run: cmake --build ./compiler/linux-clang-cpu-only-nosnippets-${{ matrix.config }}
         working-directory: physx
 
       - name: Package (Linux)
@@ -85,6 +89,8 @@ jobs:
           cp -r physx/include/* output/include/
           cp -r physx/documentation/* output/documentation/ 2>/dev/null || true
           tar -czf "$binArchiveName" -C output .
+          echo "=== Contents of output/lib/ ==="
+          ls -la output/lib/
 
       # === PUBLISH ===
       - name: Publish
