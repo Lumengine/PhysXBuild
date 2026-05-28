@@ -74,7 +74,9 @@ jobs:
           changed=0
           for f in compiler/vc17win64-gpu-md/**/*.vcxproj; do
             # Strip sm_80 / sm_86 / sm_89 / sm_90 generate-code entries.
-            sed -i -E 's| --generate-code=arch=compute_(80\|86\|89\|90),code=\[[^]]+\]||g' "$f"
+            # NB: `#` delimiter avoids clashing with `|` alternation inside the
+            # pattern (which `s|...|` would mis-parse as the end of the regex).
+            sed -i -E 's# --generate-code=arch=compute_(80|86|89|90),code=\[[^]]+\]##g' "$f"
             # Serialize ptxas threads per nvcc invocation.
             sed -i 's| -t0 | -t1 |g' "$f"
             changed=$((changed+1))
