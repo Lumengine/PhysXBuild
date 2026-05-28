@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<preset name="vc17win64-gpu-md" comment="VC17 Win64 PhysX general settings (GPU, dynamic CRT)">
+  <platform targetPlatform="win64" compiler="vc17" />
+  <CMakeSwitches>
+    <cmakeSwitch name="PX_BUILDSNIPPETS" value="True" comment="Generate the snippets" />
+    <cmakeSwitch name="PX_BUILDPVDRUNTIME" value="True" comment="Generate the OmniPVD project" />
+    <cmakeSwitch name="PX_GENERATE_GPU_PROJECTS" value="True" comment="Generate the GPU projects" />
+    <cmakeSwitch name="PX_GENERATE_GPU_PROJECTS_ONLY" value="False" comment="Generate both CPU and GPU projects" />
+    <cmakeSwitch name="PX_GENERATE_GPU_REDUCED_ARCHITECTURES" value="False" comment="Generate the full CUDA architecture set for distribution binaries" />
+    <cmakeSwitch name="PX_GENERATE_STATIC_LIBRARIES" value="False" comment="Generate shared libraries" />
+    <cmakeSwitch name="PX_GENERATE_GPU_STATIC_LIBRARIES" value="False" comment="Generate PhysXGpu as a DLL" />
+    <cmakeSwitch name="NV_USE_STATIC_WINCRT" value="False" comment="Use the dynamically linked Windows CRT" />
+    <cmakeSwitch name="NV_USE_DEBUG_WINCRT" value="True" comment="Use the debug version of the CRT for debug builds" />
+    <cmakeSwitch name="PX_FLOAT_POINT_PRECISE_MATH" value="False" comment="Float point precise math" />
+  </CMakeSwitches>
+  <CMakeParams>
+    <cmakeParam name="CMAKE_INSTALL_PREFIX" value="install/vc17win64-gpu-md/PhysX" comment="Install path relative to PhysX SDK root" />
+  </CMakeParams>
+</preset>

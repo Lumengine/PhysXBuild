@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-2022, ubuntu-latest]
         config: [debug, release, profile, checked]
 
     steps:
@@ -25,61 +25,78 @@ jobs:
           ref: 107.0-physx-5.6.0
 
       # === WINDOWS ===
+      - name: Install CUDA Toolkit (Windows)
+        if: runner.os == 'Windows'
+        uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.5.0'
+          method: network
+          sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.config }}.txt'
+
       - name: Download preset (Windows)
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         run: |
-          curl -L -o vc17win64-cpu-only-md.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/vc17win64-cpu-only-md.xml
-          cp vc17win64-cpu-only-md.xml ./physx/buildtools/presets/public/
+          curl -L -o vc17win64-gpu-md.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/vc17win64-gpu-md.xml
+          cp vc17win64-gpu-md.xml ./physx/buildtools/presets/public/
 
       - name: Generate Projects (Windows)
-        if: matrix.os == 'windows-latest'
-        run: ./generate_projects.bat vc17win64-cpu-only-md
+        if: runner.os == 'Windows'
+        run: ./generate_projects.bat vc17win64-gpu-md
         working-directory: physx
 
       - name: Build (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cmake --build ./compiler/vc17win64-cpu-only-md --config ${{ matrix.config }}
+        if: runner.os == 'Windows'
+        run: cmake --build ./compiler/vc17win64-gpu-md --config ${{ matrix.config }}
         working-directory: physx
 
       - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         id: package-windows
         shell: bash
         run: |
-          mkdir -p output/bin output/lib
-          binArchiveName="PhysX-5.6.0.win.x86_64.vc143.md.${{ matrix.config }}.zip"
+          mkdir -p output/bin output/lib output/include output/documentation
+          binArchiveName="Physx-5.6.0.win.x86_64.vc143.md.${{ matrix.config }}.zip"
           echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
           cp physx/bin/win.x86_64.vc143.md/${{ matrix.config }}/*.dll output/bin/
           cp physx/bin/win.x86_64.vc143.md/${{ matrix.config }}/*.lib output/lib/
-          7z a "$binArchiveName" ./output/bin/ ./output/lib/ ./physx/include/ ./physx/documentation/
+          cp -r physx/include/* output/include/
+          cp -r physx/documentation/* output/documentation/ 2>/dev/null || true
+          if [ -n "${CUDA_PATH:-}" ]; then
+            cuda_bin="$(cygpath -u "$CUDA_PATH")/bin"
+            cp "$cuda_bin"/cudart64_*.dll output/bin/ 2>/dev/null || true
+          fi
+          test -f output/bin/PhysXGpu_64.dll
+          test -f output/bin/PhysXDevice64.dll
+          (cd output && 7z a "../$binArchiveName" ./bin/ ./lib/ ./include/ ./documentation/)
 
       # === LINUX ===
       - name: Install dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           sudo apt update
           sudo apt install -y ninja-build cmake clang python3
 
       - name: Download preset (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           curl -L -o linux-clang-cpu-only-nosnippets.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/linux-clang-cpu-only-nosnippets.xml
           cp linux-clang-cpu-only-nosnippets.xml ./physx/buildtools/presets/public/
 
       - name: Generate Projects (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           chmod +x ./generate_projects.sh
           ./generate_projects.sh linux-clang-cpu-only-nosnippets
         working-directory: physx
 
       - name: Build (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: cmake --build ./compiler/linux-clang-cpu-only-nosnippets-${{ matrix.config }}
         working-directory: physx
 
       - name: Package (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         id: package-linux
         run: |
           mkdir -p output/lib output/include output/documentation
