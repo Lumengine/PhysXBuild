@@ -18,6 +18,18 @@ jobs:
         config: [debug, release, profile, checked]
 
     steps:
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          ref="${GITHUB_REF_NAME:-}"
+          if [ -z "$ref" ] || [ "$ref" = "main" ]; then
+            ref="v0.0.0-dev"
+          fi
+          version="${ref#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version"
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -54,20 +66,30 @@ jobs:
         if: runner.os == 'Windows'
         id: package-windows
         shell: bash
+        env:
+          PHYSX_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           mkdir -p output/bin output/lib output/include output/documentation
-          binArchiveName="Physx-5.6.0.win.x86_64.vc143.md.${{ matrix.config }}.zip"
+          binArchiveName="Physx-${PHYSX_VERSION}.win.x86_64.vc143.md.${{ matrix.config }}.zip"
           echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
           cp physx/bin/win.x86_64.vc143.md/${{ matrix.config }}/*.dll output/bin/
           cp physx/bin/win.x86_64.vc143.md/${{ matrix.config }}/*.lib output/lib/
           cp -r physx/include/* output/include/
           cp -r physx/documentation/* output/documentation/ 2>/dev/null || true
+          # PhysXDevice64.dll is a prebuilt redistributable in some PhysX SDK drops.
+          # Search the whole physx/bin tree and copy if found (do not fail if absent).
+          found_device="$(find physx/bin -type f -name 'PhysXDevice64.dll' -print -quit 2>/dev/null || true)"
+          if [ -n "$found_device" ]; then
+            cp "$found_device" output/bin/
+          fi
           if [ -n "${CUDA_PATH:-}" ]; then
             cuda_bin="$(cygpath -u "$CUDA_PATH")/bin"
             cp "$cuda_bin"/cudart64_*.dll output/bin/ 2>/dev/null || true
           fi
+          # PhysXGpu_64.dll is the GPU build's required artifact. Hard-fail if missing.
           test -f output/bin/PhysXGpu_64.dll
-          test -f output/bin/PhysXDevice64.dll
+          echo "=== Contents of output/bin/ ==="
+          ls -la output/bin/
           (cd output && 7z a "../$binArchiveName" ./bin/ ./lib/ ./include/ ./documentation/)
 
       # === LINUX ===
@@ -98,9 +120,11 @@ jobs:
       - name: Package (Linux)
         if: runner.os == 'Linux'
         id: package-linux
+        env:
+          PHYSX_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           mkdir -p output/lib output/include output/documentation
-          binArchiveName="PhysX-5.6.0.linux.x86_64.clang.${{ matrix.config }}.tar.gz"
+          binArchiveName="PhysX-${PHYSX_VERSION}.linux.x86_64.clang.${{ matrix.config }}.tar.gz"
           echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
           cp physx/bin/linux.clang/${{ matrix.config }}/*.a output/lib/ 2>/dev/null || true
           cp -r physx/include/* output/include/

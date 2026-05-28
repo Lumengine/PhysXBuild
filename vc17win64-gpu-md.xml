@@ -6,7 +6,7 @@
     <cmakeSwitch name="PX_BUILDPVDRUNTIME" value="True" comment="Generate the OmniPVD project" />
     <cmakeSwitch name="PX_GENERATE_GPU_PROJECTS" value="True" comment="Generate the GPU projects" />
     <cmakeSwitch name="PX_GENERATE_GPU_PROJECTS_ONLY" value="False" comment="Generate both CPU and GPU projects" />
-    <cmakeSwitch name="PX_GENERATE_GPU_REDUCED_ARCHITECTURES" value="False" comment="Generate the full CUDA architecture set for distribution binaries" />
+    <cmakeSwitch name="PX_GENERATE_GPU_REDUCED_ARCHITECTURES" value="True" comment="Generate a single CUDA arch + PTX fallback. Required on GitHub runners (16 GB RAM) — the full arch set OOM-crashes ptxas with -t0 parallel nvcc. PTX JIT covers any sm_70+ GPU at first run." />
     <cmakeSwitch name="PX_GENERATE_STATIC_LIBRARIES" value="False" comment="Generate shared libraries" />
     <cmakeSwitch name="PX_GENERATE_GPU_STATIC_LIBRARIES" value="False" comment="Generate PhysXGpu as a DLL" />
     <cmakeSwitch name="NV_USE_STATIC_WINCRT" value="False" comment="Use the dynamically linked Windows CRT" />
