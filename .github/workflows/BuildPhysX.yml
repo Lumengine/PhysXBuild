@@ -57,9 +57,41 @@ jobs:
         run: ./generate_projects.bat vc17win64-gpu-md
         working-directory: physx
 
+      - name: Patch CUDA arches + nvcc threading (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: physx
+        run: |
+          # The 16 GB GitHub Windows runner cannot fit the full PhysX arch matrix:
+          # PhysX 5.6 emits --generate-code for sm_75/80/86/89/90 plus `-t0`, which
+          # spawns one ptxas per arch in parallel and crashes ptxas with
+          # ACCESS_VIOLATION (memory exhaustion). PX_GENERATE_GPU_REDUCED_ARCHITECTURES
+          # only drops sm_70, not enough.
+          #
+          # Strategy: keep sm_75 only and rely on PTX JIT to cover Ampere/Ada/Hopper
+          # at first launch, then force nvcc to serialize ptxas per .cu file (-t1).
+          shopt -s globstar nullglob
+          changed=0
+          for f in compiler/vc17win64-gpu-md/**/*.vcxproj; do
+            # Strip sm_80 / sm_86 / sm_89 / sm_90 generate-code entries.
+            sed -i -E 's| --generate-code=arch=compute_(80\|86\|89\|90),code=\[[^]]+\]||g' "$f"
+            # Serialize ptxas threads per nvcc invocation.
+            sed -i 's| -t0 | -t1 |g' "$f"
+            changed=$((changed+1))
+          done
+          echo "Patched $changed .vcxproj file(s)."
+          # Sanity check: a GPU project's nvcc command should now reference only sm_75.
+          gpu_proj="$(ls compiler/vc17win64-gpu-md/sdk_gpu_source_bin/PhysXBroadphaseGpu.vcxproj 2>/dev/null || true)"
+          if [ -n "$gpu_proj" ]; then
+            echo "=== generate-code lines remaining in PhysXBroadphaseGpu.vcxproj ==="
+            grep -oE -- '--generate-code=arch=compute_[0-9]+,code=\[[^]]+\]' "$gpu_proj" | sort -u
+          fi
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        run: cmake --build ./compiler/vc17win64-gpu-md --config ${{ matrix.config }}
+        # --parallel 2 caps msbuild to two .vcxproj at once; combined with -t1 this
+        # keeps RAM usage well under 16 GB on the runner.
+        run: cmake --build ./compiler/vc17win64-gpu-md --config ${{ matrix.config }} --parallel 2
         working-directory: physx
 
       - name: Package (Windows)
