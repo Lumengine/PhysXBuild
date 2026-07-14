@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NVIDIA-Omniverse/PhysX
-          ref: 107.0-physx-5.6.0
+          ref: 107.3-physx-5.6.1
 
       # === WINDOWS ===
       - name: Install CUDA Toolkit (Windows)
