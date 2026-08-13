@@ -23,9 +23,14 @@ jobs:
         shell: bash
         run: |
           ref="${GITHUB_REF_NAME:-}"
-          if [ -z "$ref" ] || [ "$ref" = "main" ]; then
-            ref="v0.0.0-dev"
-          fi
+          # Only a v-prefixed tag names a real version. Anything else — main, or
+          # a branch used for a workflow_dispatch test run — must fall back to
+          # the dev version: a ref like `fix/linux-gpu-build` would otherwise be
+          # spliced into the archive name and its '/' would break `tar -czf`.
+          case "$ref" in
+            v[0-9]*) ;;
+            *)       ref="v0.0.0-dev" ;;
+          esac
           version="${ref#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $version"
@@ -49,7 +54,7 @@ jobs:
       - name: Download preset (Windows)
         if: runner.os == 'Windows'
         run: |
-          curl -L -o vc17win64-gpu-md.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/vc17win64-gpu-md.xml
+          curl -L --fail -o vc17win64-gpu-md.xml https://raw.githubusercontent.com/LumiverseAI/PhysXBuild/main/vc17win64-gpu-md.xml
           cp vc17win64-gpu-md.xml ./physx/buildtools/presets/public/
 
       - name: Generate Projects (Windows)
@@ -130,6 +135,18 @@ jobs:
           (cd output && 7z a "../$binArchiveName" ./bin/ ./lib/ ./include/ ./documentation/)
 
       # === LINUX ===
+      # Mirrors the Windows branch: GPU-enabled, shared libraries, same
+      # PVD runtime. Snippets stay off (they need OpenGL/X11, absent from the
+      # headless runner) — they are samples and never ship in the artifact.
+      - name: Install CUDA Toolkit (Linux)
+        if: runner.os == 'Linux'
+        uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.5.0'
+          method: network
+          sub-packages: '["nvcc", "cudart"]'
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.config }}.txt'
+
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -139,19 +156,21 @@ jobs:
       - name: Download preset (Linux)
         if: runner.os == 'Linux'
         run: |
-          curl -L -o linux-clang-cpu-only-nosnippets.xml https://raw.githubusercontent.com/Lumengine/PhysXBuild/main/linux-clang-cpu-only-nosnippets.xml
-          cp linux-clang-cpu-only-nosnippets.xml ./physx/buildtools/presets/public/
+          curl -L --fail -o linux-clang-gpu.xml https://raw.githubusercontent.com/LumiverseAI/PhysXBuild/main/linux-clang-gpu.xml
+          cp linux-clang-gpu.xml ./physx/buildtools/presets/public/
 
       - name: Generate Projects (Linux)
         if: runner.os == 'Linux'
         run: |
           chmod +x ./generate_projects.sh
-          ./generate_projects.sh linux-clang-cpu-only-nosnippets
+          ./generate_projects.sh linux-clang-gpu
         working-directory: physx
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
-        run: cmake --build ./compiler/linux-clang-cpu-only-nosnippets-${{ matrix.config }}
+        # --parallel 2 mirrors the Windows cap: combined with the reduced CUDA
+        # arch set from the preset it keeps ptxas RAM under the runner's 16 GB.
+        run: cmake --build ./compiler/linux-clang-gpu-${{ matrix.config }} --parallel 2
         working-directory: physx
 
       - name: Package (Linux)
@@ -160,18 +179,55 @@ jobs:
         env:
           PHYSX_VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          mkdir -p output/lib output/include output/documentation
+          set -euo pipefail
+          mkdir -p output/bin output/lib output/include output/documentation
           binArchiveName="PhysX-${PHYSX_VERSION}.linux.x86_64.clang.${{ matrix.config }}.tar.gz"
           echo "PHYSX_BINARY_ARCHIVE=$binArchiveName" >> "$GITHUB_OUTPUT"
-          cp physx/bin/linux.clang/${{ matrix.config }}/*.a output/lib/ 2>/dev/null || true
+
+          # Locate the build output instead of hardcoding a path: the bin
+          # directory name is derived from the platform/compiler by PhysX's own
+          # cmake and has moved between SDK versions. A previous hardcoded glob
+          # silently matched nothing and shipped a headers-only archive.
+          echo "=== physx/bin tree ==="
+          find physx/bin -maxdepth 3 -type d | sort
+
+          mapfile -t _libs < <(find physx/bin -type f \( -name '*.so' -o -name '*.so.*' -o -name '*.a' \) -print)
+          if [ "${#_libs[@]}" -eq 0 ]; then
+            echo "::error::No PhysX libraries found under physx/bin — the build produced nothing to package."
+            exit 1
+          fi
+          for _l in "${_libs[@]}"; do
+            case "$_l" in
+              *.a) cp -P "$_l" output/lib/ ;;
+              *)   cp -P "$_l" output/bin/ ;;
+            esac
+          done
+
           cp -r physx/include/* output/include/
           cp -r physx/documentation/* output/documentation/ 2>/dev/null || true
-          tar -czf "$binArchiveName" -C output .
+
+          # Ship the CUDA runtime next to the libraries, as the Windows branch does.
+          if [ -n "${CUDA_PATH:-}" ] && [ -d "${CUDA_PATH}/lib64" ]; then
+            cp -P "${CUDA_PATH}"/lib64/libcudart.so* output/bin/ 2>/dev/null || true
+          fi
+
+          # Hard gates, mirroring `test -f output/bin/PhysXGpu_64.dll` on Windows.
+          # Without these a broken build publishes a green, empty release.
+          test -f output/bin/libPhysX_64.so
+          test -f output/bin/libPhysXGpu_64.so
+
+          echo "=== Contents of output/bin/ ==="
+          ls -la output/bin/
           echo "=== Contents of output/lib/ ==="
           ls -la output/lib/
 
+          tar -czf "$binArchiveName" -C output .
+
       # === PUBLISH ===
+      # Tags only: a workflow_dispatch run on a branch has no tag to release
+      # against, and would fail here after a perfectly good build.
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: |

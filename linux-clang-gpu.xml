@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<preset name="linux-clang-gpu" comment="Linux clang PhysX general settings (GPU, shared libraries)">
+  <platform targetPlatform="linux" compiler="clang" />
+  <CMakeSwitches>
+    <cmakeSwitch name="PX_BUILDSNIPPETS" value="False" comment="Disable snippets: they need OpenGL/X11, absent from the headless runner. Snippets are samples and are never shipped, so this does not change the published artifact." />
+    <cmakeSwitch name="PX_BUILDPVDRUNTIME" value="True" comment="Generate the OmniPVD project" />
+    <cmakeSwitch name="PX_GENERATE_GPU_PROJECTS" value="True" comment="Generate the GPU projects" />
+    <cmakeSwitch name="PX_GENERATE_GPU_PROJECTS_ONLY" value="False" comment="Generate both CPU and GPU projects" />
+    <cmakeSwitch name="PX_GENERATE_GPU_REDUCED_ARCHITECTURES" value="True" comment="Generate a single CUDA arch + PTX fallback. Required on GitHub runners (16 GB RAM) — the full arch set OOM-crashes ptxas under parallel nvcc. PTX JIT covers any sm_70+ GPU at first run." />
+    <cmakeSwitch name="PX_GENERATE_STATIC_LIBRARIES" value="False" comment="Generate shared libraries — mirrors vc17win64-gpu-md" />
+    <cmakeSwitch name="PX_GENERATE_GPU_STATIC_LIBRARIES" value="False" comment="Generate PhysXGpu as a shared library" />
+    <cmakeSwitch name="PX_FLOAT_POINT_PRECISE_MATH" value="False" comment="Float point precise math" />
+  </CMakeSwitches>
+  <CMakeParams>
+    <cmakeParam name="CMAKE_INSTALL_PREFIX" value="install/linux-clang-gpu/PhysX" comment="Install path relative to PhysX SDK root" />
+  </CMakeParams>
+</preset>
