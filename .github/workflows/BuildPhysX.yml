@@ -6,6 +6,12 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
+# Creating the release needs a writable token. Org-default workflow
+# permissions are read-only, which surfaced as a bare `403` from
+# action-gh-release after a successful build.
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.os }} - ${{ matrix.config }}
@@ -151,13 +157,55 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update
-          sudo apt install -y ninja-build cmake clang python3
+          # libgl1-mesa-dev is for the GL *headers*, not for rendering: the CUDA
+          # toolkit's cudaGL.h includes <GL/gl.h>, and PhysX's CudaContextManager
+          # includes cudaGL.h, so the GPU SDK does not compile without them on a
+          # headless runner. Windows gets these from the Windows SDK.
+          sudo apt install -y ninja-build cmake clang python3 libgl1-mesa-dev
 
       - name: Download preset (Linux)
         if: runner.os == 'Linux'
         run: |
           curl -L --fail -o linux-clang-gpu.xml https://raw.githubusercontent.com/LumiverseAI/PhysXBuild/main/linux-clang-gpu.xml
           cp linux-clang-gpu.xml ./physx/buildtools/presets/public/
+
+      - name: Limit CUDA architectures (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: physx
+        run: |
+          # PhysX 5.6.1 hardcodes its arch list in cmakegpu/CMakeLists.txt:
+          #   REDUCED: GENERATE_ARCH_CODE_LIST(SASS "80,86,89,90,100,120" PTX "120")
+          #   full:    GENERATE_ARCH_CODE_LIST(SASS "70,80,...,100,120"    PTX "120")
+          # so PX_GENERATE_GPU_REDUCED_ARCHITECTURES only drops sm_70 — it still
+          # asks for Blackwell, which the pinned CUDA 12.5 toolkit rejects with
+          #   nvcc fatal : Unsupported gpu architecture 'compute_100'
+          #
+          # Rewrite the list at the source, BEFORE project generation, rather
+          # than patching generated build files afterwards: an earlier attempt
+          # did the latter and silently matched nothing, because the flags are
+          # not written where it looked. Patching the input is deterministic —
+          # cmake then emits correct flags everywhere on its own.
+          #
+          # SASS "80" builds one native target (cheap in RAM and time on the
+          # 16 GB runner); PTX "80" is the JIT floor, so every sm_80+ GPU —
+          # Ampere, Ada, Hopper, Blackwell — is covered at first launch. Widen
+          # the SASS list here if a native target for a specific GPU is wanted.
+          ARCH_CML=source/compiler/cmakegpu/CMakeLists.txt
+
+          echo "=== arch lists before ==="
+          grep -nE 'GENERATE_ARCH_CODE_LIST\(' "$ARCH_CML"
+
+          sed -i -E 's#GENERATE_ARCH_CODE_LIST\(SASS "[^"]*" PTX "[^"]*"\)#GENERATE_ARCH_CODE_LIST(SASS "80" PTX "80")#g' "$ARCH_CML"
+
+          echo "=== arch lists after ==="
+          grep -nE 'GENERATE_ARCH_CODE_LIST\(' "$ARCH_CML"
+
+          # Fail here, with the lines in view, rather than inside nvcc later.
+          if grep -qE 'GENERATE_ARCH_CODE_LIST\([^)]*(100|120)' "$ARCH_CML"; then
+            echo "::error::A Blackwell arch survived the rewrite — CUDA 12.5 cannot compile it. See the lines above."
+            exit 1
+          fi
 
       - name: Generate Projects (Linux)
         if: runner.os == 'Linux'
@@ -168,8 +216,8 @@ jobs:
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
-        # --parallel 2 mirrors the Windows cap: combined with the reduced CUDA
-        # arch set from the preset it keeps ptxas RAM under the runner's 16 GB.
+        # --parallel 2 mirrors the Windows cap: combined with the single CUDA
+        # arch left by the patch above it keeps ptxas RAM under the runner's 16 GB.
         run: cmake --build ./compiler/linux-clang-gpu-${{ matrix.config }} --parallel 2
         working-directory: physx
 
