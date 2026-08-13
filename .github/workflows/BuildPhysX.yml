@@ -157,7 +157,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update
-          sudo apt install -y ninja-build cmake clang python3
+          # libgl1-mesa-dev is for the GL *headers*, not for rendering: the CUDA
+          # toolkit's cudaGL.h includes <GL/gl.h>, and PhysX's CudaContextManager
+          # includes cudaGL.h, so the GPU SDK does not compile without them on a
+          # headless runner. Windows gets these from the Windows SDK.
+          sudo apt install -y ninja-build cmake clang python3 libgl1-mesa-dev
 
       - name: Download preset (Linux)
         if: runner.os == 'Linux'
