@@ -6,6 +6,12 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
+# Creating the release needs a writable token. Org-default workflow
+# permissions are read-only, which surfaced as a bare `403` from
+# action-gh-release after a successful build.
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.os }} - ${{ matrix.config }}
@@ -166,10 +172,51 @@ jobs:
           ./generate_projects.sh linux-clang-gpu
         working-directory: physx
 
+      - name: Patch CUDA arches (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: physx
+        run: |
+          # Same constraint as the Windows branch, same remedy. PhysX 5.6.1
+          # emits --generate-code for sm_75/80/86/89/90 plus Blackwell sm_100,
+          # and the CUDA 12.5 toolkit pinned above does not know compute_100:
+          #   nvcc fatal : Unsupported gpu architecture 'compute_100'
+          # PX_GENERATE_GPU_REDUCED_ARCHITECTURES only drops sm_70 — verified
+          # insufficient on this runner. Keep sm_75 alone and rely on PTX JIT
+          # to cover Ampere/Ada/Hopper/Blackwell at first launch.
+          BUILD_DIR="compiler/linux-clang-gpu-${{ matrix.config }}"
+
+          # Log the real flag spelling before touching anything: if the
+          # substitution below ever stops matching, this is what tells us why.
+          echo "=== arch flags before patching ==="
+          grep -rhoE -- '-{1,2}gen[a-z-]*code=arch=compute_[0-9]+[^ ]*' "$BUILD_DIR" | sort -u || true
+
+          # CMake writes the CUDA flags into flags.make, and repeats them in
+          # build.make for some generators. One substitution covers every
+          # spelling nvcc accepts (`--generate-code` / `-gencode`, and a code=
+          # value written as [a,b], as sm_NN, or as an escaped-quote list):
+          # deliberately do NOT model the quoting, just consume to the next
+          # space. Matching the escaped quotes was tried first and silently
+          # failed to match, which is how compute_100 would survive again.
+          find "$BUILD_DIR" -type f \( -name 'flags.make' -o -name 'build.make' \) -print0 |
+            xargs -0 sed -i -E \
+              -e 's# -{1,2}gen[a-z-]*code=arch=compute_(8[0-9]|9[0-9]|1[0-9][0-9]),code=[^ ]*##g'
+
+          echo "=== arch flags after patching ==="
+          grep -rhoE -- '-{1,2}gen[a-z-]*code=arch=compute_[0-9]+[^ ]*' "$BUILD_DIR" | sort -u || true
+
+          # Fail here with a readable message rather than 90 seconds later
+          # inside nvcc, if the flags turned out to be spelled differently.
+          if grep -rqE 'compute_1[0-9][0-9]' "$BUILD_DIR"; then
+            echo "::error::compute_1xx survived the patch — the arch flags are not in an expected format. See the dump above."
+            grep -rnE 'compute_1[0-9][0-9]' "$BUILD_DIR" | head -5
+            exit 1
+          fi
+
       - name: Build (Linux)
         if: runner.os == 'Linux'
-        # --parallel 2 mirrors the Windows cap: combined with the reduced CUDA
-        # arch set from the preset it keeps ptxas RAM under the runner's 16 GB.
+        # --parallel 2 mirrors the Windows cap: combined with the single CUDA
+        # arch left by the patch above it keeps ptxas RAM under the runner's 16 GB.
         run: cmake --build ./compiler/linux-clang-gpu-${{ matrix.config }} --parallel 2
         working-directory: physx
 
