@@ -264,6 +264,50 @@ jobs:
           test -f output/bin/libPhysX_64.so
           test -f output/bin/libPhysXGpu_64.so
 
+          # --- RUNPATH: make it $ORIGIN-relative -------------------------------
+          # The archive is packaged straight from physx/bin, so each library
+          # keeps the BUILD rpath cmake gave it -- an absolute path into this
+          # runner's workspace, meaningless to every consumer.
+          #
+          # That is not cosmetic. libPhysX_64.so dlopen()s libPhysXGpu_64.so by
+          # bare name, and a bare name is resolved against the DT_RUNPATH of the
+          # CALLING object, not the executable's. With the runner's path in
+          # there, the load fails on every other machine and PhysX silently
+          # falls back to CPU simulation on GPU-capable hardware, reporting one
+          # "Failed to load" line. Consumers can only work around it by
+          # exporting LD_LIBRARY_PATH before launch.
+          #
+          # Every library in this archive sits in one directory, so $ORIGIN is
+          # both correct and complete. Done here rather than through
+          # CMAKE_BUILD_RPATH_USE_ORIGIN because PhysX's own cmake sets rpath
+          # per target: normalising the packaged artifact is deterministic and
+          # inspectable, and it is the form verified against a real consumer.
+          sudo apt-get install -y -q patchelf
+          for _so in output/bin/*.so output/bin/*.so.*; do
+            [ -f "$_so" ] || continue
+            patchelf --set-rpath '$ORIGIN' "$_so" || {
+              echo "::error::patchelf failed on $_so"
+              exit 1
+            }
+          done
+
+          # Gate it: a leaked absolute runpath is a broken artifact in exactly
+          # the sense the checks above guard against, and it fails silently at
+          # the consumer instead of here.
+          for _so in output/bin/*.so output/bin/*.so.*; do
+            [ -f "$_so" ] || continue
+            _rp="$(patchelf --print-rpath "$_so" || true)"
+            case "$_rp" in
+              ''|'$ORIGIN') ;;
+              *) echo "::error::$_so kept a non-relative runpath: $_rp"; exit 1 ;;
+            esac
+          done
+          echo "=== RUNPATH after normalisation ==="
+          for _so in output/bin/*.so; do
+            [ -f "$_so" ] || continue
+            printf '%s: %s\n' "$(basename "$_so")" "$(patchelf --print-rpath "$_so")"
+          done
+
           echo "=== Contents of output/bin/ ==="
           ls -la output/bin/
           echo "=== Contents of output/lib/ ==="
